@@ -1175,7 +1175,6 @@ class AMemSettingTab extends PluginSettingTab {
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
-    new Setting(containerEl).setName("Auto-Zettelkasten").setHeading();
     containerEl.createEl("p", {
       text: "Use an OpenAI-compatible chat + embeddings API to create linked, atomic A-mem memory notes inside this vault."
     });

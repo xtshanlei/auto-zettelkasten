@@ -1,7 +1,7 @@
 {
   "id": "auto-zettelkasten",
   "name": "Auto-Zettelkasten",
-  "version": "1.1.3",
+  "version": "1.1.4",
   "minAppVersion": "1.5.0",
   "description": "将对话、文件、剪贴板文本和网页文章自动转化为带标签和双向链接的 A-mem 风格笔记。 Create linked A-mem-inspired notes from conversations, files, clipboard text, and articles.",
   "author": "Yulei",
