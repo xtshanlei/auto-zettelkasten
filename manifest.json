@@ -1,0 +1,10 @@
+{
+  "id": "auto-zettelkasten",
+  "name": "Auto-Zettelkasten",
+  "version": "1.0.0",
+  "minAppVersion": "1.5.0",
+  "description": "Turn conversations, files, clipboard text, and web articles into linked A-mem-inspired Obsidian notes.",
+  "author": "Yulei",
+  "authorUrl": "https://github.com/xtshanlei",
+  "isDesktopOnly": true
+}

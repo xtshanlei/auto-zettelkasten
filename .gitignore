@@ -1,0 +1,15 @@
+# Dependencies and local build state
+node_modules/
+*.tsbuildinfo
+
+# Release assets are produced by the GitHub Release workflow
+main.js
+main.js.map
+
+# Local Obsidian plugin settings can contain API keys
+data.json
+
+# OS/editor files
+.DS_Store
+.idea/
+.vscode/

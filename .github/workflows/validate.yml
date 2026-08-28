@@ -1,0 +1,45 @@
+name: Validate plugin
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check
+        run: npx tsc --noEmit
+
+      - name: Build release assets
+        run: npm run build
+
+      - name: Validate release metadata
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const manifest = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
+          if (!/^[a-z]+(?:-[a-z]+)*$/.test(manifest.id)) throw new Error('Plugin id must contain lowercase letters and hyphens only.');
+          if (manifest.id.includes('obsidian') || manifest.id.endsWith('plugin')) throw new Error('Plugin id violates Obsidian naming rules.');
+          if (!/^\d+\.\d+\.\d+$/.test(manifest.version)) throw new Error('Manifest version must use x.y.z semantic versioning.');
+          for (const file of ['main.js', 'manifest.json', 'README.md', 'LICENSE']) {
+            if (!fs.existsSync(file)) throw new Error(`Missing required file: ${file}`);
+          }
+          NODE

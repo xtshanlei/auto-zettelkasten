@@ -1,0 +1,25 @@
+{
+  "name": "auto-zettelkasten",
+  "version": "1.0.0",
+  "description": "Generate A-mem-inspired atomic notes in an Obsidian vault.",
+  "main": "main.js",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "node esbuild.config.mjs production"
+  },
+  "keywords": [
+    "obsidian",
+    "plugin",
+    "a-mem",
+    "zettelkasten",
+    "llm"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "esbuild": "^0.25.0",
+    "obsidian": "latest",
+    "typescript": "^5.7.3"
+  }
+}
