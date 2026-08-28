@@ -978,7 +978,8 @@ ${sourceLines.join("\n")}
   }
 
   private indexPath(): string {
-    return normalizePath(`${this.settings.notesFolder}/.amem-index.json`);
+    // Dotfiles are not reliably tracked by Obsidian's Vault API.
+    return normalizePath(`${this.settings.notesFolder}/_amem-index.json`);
   }
 
   private mocPath(): string {

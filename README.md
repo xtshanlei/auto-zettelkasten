@@ -28,7 +28,7 @@
   - 建立双向 `[[wikilink]]`，更新旧 note 的 `links`、`retrieval_count` 和 `evolution_history`
   - 可选更新旧 note 的 `context` / `tags`
 - 自动维护 `A-mem/_A-mem MOC.md`
-- 在 `A-mem/.amem-index.json` 中保存轻量检索索引和向量，避免每次都重新向量化所有 note。
+- 在 `A-mem/_amem-index.json` 中保存轻量检索索引和向量，避免每次都重新向量化所有 note。
 
 ## 安装
 
