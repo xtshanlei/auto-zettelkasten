@@ -8,6 +8,11 @@
 
 ## 已实现功能
 
+- **基于 notes 的 chatbot / Notes Q&A**
+  - 通过命令面板的 `Auto-Zettelkasten: Open notes chatbot` 或侧栏消息图标打开
+  - 对问题生成 embedding，从 A-mem 索引检索最相关的 notes，再仅依据这些内容回答
+  - 回答附带可点击的来源笔记；每次检索会更新对应 note 的 `retrieval_count` 与 `last_accessed`
+  - 聊天记录默认只存在当前侧栏会话，不会写入 Vault
 - **输入入口**
   - 当前文件或文件资源管理器右键菜单中的 vault 文件（Markdown、TXT、HTML、JSON、CSV）
   - 编辑器选中文本

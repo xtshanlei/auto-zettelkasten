@@ -1,11 +1,13 @@
 import {
   App,
+  ItemView,
   Modal,
   Notice,
   Plugin,
   PluginSettingTab,
   Setting,
   TFile,
+  WorkspaceLeaf,
   normalizePath,
   requestUrl
 } from "obsidian";
@@ -34,6 +36,7 @@ interface AMemSettings {
   chunkOverlapCharacters: number;
   maxNeighbors: number;
   minSimilarity: number;
+  chatRetrievalCount: number;
 }
 
 const DEFAULT_SETTINGS: AMemSettings = {
@@ -56,7 +59,8 @@ const DEFAULT_SETTINGS: AMemSettings = {
   maxChunkCharacters: 12000,
   chunkOverlapCharacters: 800,
   maxNeighbors: 5,
-  minSimilarity: 0.34
+  minSimilarity: 0.34,
+  chatRetrievalCount: 6
 };
 
 interface SourceDocument {
@@ -125,6 +129,18 @@ interface IngestResult {
   chunksProcessed: number;
 }
 
+interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+interface ChatAnswer {
+  answer: string;
+  sources: Neighbor[];
+}
+
+const CHAT_VIEW_TYPE = "auto-zettelkasten-chat";
+
 export default class AMemNotesPlugin extends Plugin {
   settings!: AMemSettings;
   private service!: AMemService;
@@ -134,9 +150,13 @@ export default class AMemNotesPlugin extends Plugin {
     this.service = new AMemService(this.app, this);
 
     this.addSettingTab(new AMemSettingTab(this.app, this));
+    this.registerView(CHAT_VIEW_TYPE, (leaf) => new AMemChatView(leaf, this));
 
     this.addRibbonIcon("brain", "Create A-mem notes from clipboard", () => {
       void this.ingestClipboard();
+    });
+    this.addRibbonIcon("message-circle", "Ask Auto-Zettelkasten notes", () => {
+      void this.activateChat();
     });
 
     this.addCommand({
@@ -180,6 +200,12 @@ export default class AMemNotesPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: "open-notes-chat",
+      name: "Open notes chatbot",
+      callback: () => void this.activateChat()
+    });
+
+    this.addCommand({
       id: "rebuild-moc",
       name: "Rebuild A-mem MOC",
       callback: () => void this.rebuildMoc()
@@ -206,6 +232,19 @@ export default class AMemNotesPlugin extends Plugin {
 
   async saveSettings(): Promise<void> {
     await this.saveData(this.settings);
+  }
+
+  getMemoryService(): AMemService {
+    return this.service;
+  }
+
+  async activateChat(): Promise<void> {
+    let leaf = this.app.workspace.getLeavesOfType(CHAT_VIEW_TYPE)[0];
+    if (!leaf) {
+      leaf = this.app.workspace.getRightLeaf(false) ?? this.app.workspace.getLeaf("tab");
+      await leaf.setViewState({ type: CHAT_VIEW_TYPE, active: true });
+    }
+    await this.app.workspace.revealLeaf(leaf);
   }
 
   private async ingestActiveFile(): Promise<void> {
@@ -455,6 +494,52 @@ class AMemService {
     return { created, chunksProcessed: chunks.length };
   }
 
+  async answerQuestion(question: string, history: ChatMessage[]): Promise<ChatAnswer> {
+    this.assertConfigured();
+    const index = await this.loadIndex();
+    if (!index.notes.length) {
+      throw new Error("还没有 A-mem notes。请先导入对话、文件或文章。");
+    }
+
+    let questionVector: number[] | undefined;
+    try {
+      await this.backfillIndexEmbeddings(index);
+      questionVector = (await this.embedMany([truncate(question, 6000)]))[0];
+    } catch (error) {
+      console.warn("A-mem chat embedding unavailable; using lexical search", error);
+    }
+
+    const query: GeneratedNote = {
+      title: question,
+      content: question,
+      keywords: tokenize(question).slice(0, 12),
+      context: question,
+      tags: [],
+      category: "Question",
+      noteType: "question",
+      importance: 3
+    };
+    const sources = rankNeighbors(query, questionVector, index.notes, this.settings.chatRetrievalCount, this.settings.minSimilarity);
+    if (!sources.length) {
+      throw new Error("没有找到足够相关的 A-mem notes。请换一种问法或先导入相关资料。");
+    }
+
+    const context = await Promise.all(sources.map(async ({ entry, score }, position) => {
+      const file = this.app.vault.getAbstractFileByPath(entry.path);
+      const raw = file instanceof TFile ? await this.app.vault.read(file) : entry.contentPreview;
+      return `[${position + 1}] id=${entry.id}\ntitle=${entry.title}\npath=${entry.path}\nsimilarity=${score.toFixed(3)}\n${truncate(stripFrontmatter(raw), 3500)}`;
+    }));
+    const prior = history.slice(-6).map((message) => `${message.role}: ${message.content}`).join("\n");
+    const answer = await this.chatText(
+      "You answer questions over an A-mem note collection. Use only the supplied notes. State uncertainty or missing evidence. Answer in the user's language. Cite factual claims with [n] and never invent note titles, paths, or sources.",
+      `Question:\n${question}\n\nConversation history:\n${prior || "(none)"}\n\nRetrieved A-mem notes:\n${context.join("\n\n---\n\n")}`
+    );
+    await this.touchRetrievedNotes(sources);
+    index.updatedAt = new Date().toISOString();
+    await this.saveIndex(index);
+    return { answer, sources };
+  }
+
   async rebuildMoc(): Promise<void> {
     await this.ensureFolder(this.settings.notesFolder);
     const index = await this.loadIndex();
@@ -588,6 +673,30 @@ Requirements:
 
     const payload = await this.chatJson(prompt);
     return coerceEvolutionDecision(payload, new Set(neighbors.map((neighbor) => neighbor.entry.id)));
+  }
+
+  private async chatText(system: string, prompt: string): Promise<string> {
+    const response = await this.postJson("chat/completions", {
+      model: this.settings.chatModel.trim(),
+      messages: [{ role: "system", content: system }, { role: "user", content: prompt }]
+    }) as { choices?: Array<{ message?: { content?: unknown } }> };
+    const content = response.choices?.[0]?.message?.content;
+    if (typeof content !== "string" || !content.trim()) {
+      throw new Error("聊天模型没有返回回答内容。");
+    }
+    return content.trim();
+  }
+
+  private async touchRetrievedNotes(sources: Neighbor[]): Promise<void> {
+    await Promise.all(sources.map(async ({ entry }) => {
+      const file = this.app.vault.getAbstractFileByPath(entry.path);
+      if (!(file instanceof TFile)) return;
+      await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
+        const data = frontmatter as Record<string, unknown>;
+        data.retrieval_count = Math.max(0, Number(data.retrieval_count ?? 0) || 0) + 1;
+        data.last_accessed = new Date().toISOString();
+      });
+    }));
   }
 
   private async chatJson(prompt: string): Promise<unknown> {
@@ -988,6 +1097,72 @@ ${sections.join("\n\n") || "_No A-mem notes yet._"}
   }
 }
 
+class AMemChatView extends ItemView {
+  private readonly history: ChatMessage[] = [];
+  private messagesEl!: HTMLElement;
+  private inputEl!: HTMLTextAreaElement;
+  private sendButton!: HTMLButtonElement;
+
+  constructor(leaf: WorkspaceLeaf, private readonly plugin: AMemNotesPlugin) { super(leaf); }
+  getViewType(): string { return CHAT_VIEW_TYPE; }
+  getDisplayText(): string { return "Auto-Zettelkasten chat"; }
+  getIcon(): string { return "message-circle"; }
+
+  async onOpen(): Promise<void> {
+    const root = this.contentEl;
+    root.empty(); root.addClass("amem-chat");
+    root.createEl("h4", { text: "Ask your A-mem notes" });
+    root.createEl("p", { text: "Answers use retrieved notes. History stays in this pane only." });
+    this.messagesEl = root.createDiv({ cls: "amem-chat-messages" });
+    this.addMessage("assistant", "Ask a question about the notes in your A-mem folder.");
+    this.inputEl = root.createEl("textarea", { cls: "amem-chat-input", placeholder: "Ask about your notes…" });
+    this.inputEl.rows = 4;
+    this.inputEl.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); void this.submit(); }
+    });
+    const actions = root.createDiv({ cls: "amem-chat-actions" });
+    const clear = actions.createEl("button", { text: "Clear" });
+    clear.addEventListener("click", () => this.clear());
+    this.sendButton = actions.createEl("button", { text: "Ask", cls: "mod-cta" });
+    this.sendButton.addEventListener("click", () => void this.submit());
+  }
+
+  private clear(): void {
+    this.history.length = 0; this.messagesEl.empty();
+    this.addMessage("assistant", "Chat cleared. Ask another question about your notes.");
+  }
+
+  private async submit(): Promise<void> {
+    const question = this.inputEl.value.trim();
+    if (!question || this.sendButton.disabled) return;
+    this.addMessage("user", question); this.history.push({ role: "user", content: question }); this.inputEl.value = "";
+    this.sendButton.disabled = true; this.sendButton.setText("Searching notes…");
+    try {
+      const result = await this.plugin.getMemoryService().answerQuestion(question, this.history);
+      this.addMessage("assistant", result.answer, result.sources);
+      this.history.push({ role: "assistant", content: result.answer });
+    } catch (error) {
+      this.addMessage("assistant", `Unable to answer: ${errorMessage(error)}`);
+    } finally {
+      this.sendButton.disabled = false; this.sendButton.setText("Ask"); this.inputEl.focus();
+    }
+  }
+
+  private addMessage(role: ChatMessage["role"], text: string, sources: Neighbor[] = []): void {
+    const message = this.messagesEl.createDiv({ cls: `amem-chat-message amem-chat-${role}` });
+    message.createDiv({ cls: "amem-chat-role", text: role === "user" ? "You" : "Auto-Zettelkasten" });
+    message.createDiv({ cls: "amem-chat-text", text });
+    if (sources.length) {
+      const list = message.createDiv({ cls: "amem-chat-sources" }); list.createEl("strong", { text: "Retrieved notes" });
+      for (const [index, source] of sources.entries()) {
+        const link = list.createEl("a", { text: `[${index + 1}] ${source.entry.title}`, href: source.entry.path });
+        link.addEventListener("click", (event) => { event.preventDefault(); void this.app.workspace.openLinkText(source.entry.path.replace(/\.md$/i, ""), "", true); });
+      }
+    }
+    this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
+  }
+}
+
 class AMemSettingTab extends PluginSettingTab {
   constructor(app: App, private readonly plugin: AMemNotesPlugin) {
     super(app, plugin);
@@ -1163,6 +1338,7 @@ class AMemSettingTab extends PluginSettingTab {
     this.addNumberSetting(containerEl, "Maximum characters per source chunk", "Long sources are split by paragraphs before note generation.", "maxChunkCharacters", 2000, 50000);
     this.addNumberSetting(containerEl, "Chunk overlap characters", "Context retained between adjacent chunks. Set 0 to disable overlap.", "chunkOverlapCharacters", 0, 5000);
     this.addNumberSetting(containerEl, "Nearest neighbors", "How many existing A-mem notes are sent to the evolution step.", "maxNeighbors", 1, 12);
+    this.addNumberSetting(containerEl, "Chat retrieval count", "How many matching A-mem notes are given to the chatbot for each answer.", "chatRetrievalCount", 1, 12);
     this.addNumberSetting(containerEl, "Minimum similarity", "Cosine similarity threshold (0 to 1) before a note becomes a candidate neighbor.", "minSimilarity", 0, 1, true);
   }
 
@@ -1170,7 +1346,7 @@ class AMemSettingTab extends PluginSettingTab {
     containerEl: HTMLElement,
     name: string,
     description: string,
-    key: "maxNotesPerIngest" | "maxChunkCharacters" | "chunkOverlapCharacters" | "maxNeighbors" | "minSimilarity",
+    key: "maxNotesPerIngest" | "maxChunkCharacters" | "chunkOverlapCharacters" | "maxNeighbors" | "minSimilarity" | "chatRetrievalCount",
     minimum: number,
     maximum: number,
     decimal = false
@@ -1574,6 +1750,10 @@ function wikilink(path: string, title: string): string {
   const target = path.replace(/\.md$/i, "").replace(/\]\]/g, "");
   const alias = title.replace(/[\[\]]/g, "");
   return `[[${target}|${alias}]]`;
+}
+
+function stripFrontmatter(text: string): string {
+  return text.replace(/^---\s*\n[\s\S]*?\n---\s*\n/, "");
 }
 
 function cleanInput(text: string): string {

@@ -5,3 +5,39 @@
 .amem-url-modal .setting-item-control {
   gap: 0.5rem;
 }
+
+.amem-chat {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: 0.6rem;
+  padding: 0.75rem;
+}
+
+.amem-chat > p {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  margin: 0;
+}
+
+.amem-chat-messages {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.65rem;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.amem-chat-message {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  padding: 0.6rem;
+}
+
+.amem-chat-user { background: var(--background-secondary); }
+.amem-chat-role { color: var(--text-muted); font-size: var(--font-ui-smaller); font-weight: var(--font-semibold); }
+.amem-chat-text { margin-top: 0.25rem; white-space: pre-wrap; }
+.amem-chat-sources { display: flex; flex-direction: column; gap: 0.2rem; margin-top: 0.5rem; font-size: var(--font-ui-smaller); }
+.amem-chat-input { box-sizing: border-box; resize: vertical; width: 100%; }
+.amem-chat-actions { display: flex; gap: 0.5rem; justify-content: flex-end; }

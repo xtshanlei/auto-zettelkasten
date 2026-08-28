@@ -1,6 +1,6 @@
 {
   "name": "auto-zettelkasten",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Create linked A-mem-inspired notes from conversations, files, clipboard text, and articles. 将内容自动转化为带标签和双向链接的 A-mem 风格笔记。",
   "main": "main.js",
   "scripts": {
