@@ -519,10 +519,12 @@ class AMemService {
       noteType: "question",
       importance: 3
     };
-    const sources = rankNeighbors(query, questionVector, index.notes, this.settings.chatRetrievalCount, this.settings.minSimilarity);
-    if (!sources.length) {
-      throw new Error("没有找到足够相关的 A-mem notes。请换一种问法或先导入相关资料。");
-    }
+    const strictSources = rankNeighbors(query, questionVector, index.notes, this.settings.chatRetrievalCount, this.settings.minSimilarity);
+    // A-mem retrieval is top-K first: a low score means weak evidence, not that the agent must refuse to answer.
+    // Let the answering model disclose insufficient evidence when the best candidates are still weak.
+    const sources = strictSources.length
+      ? strictSources
+      : rankNeighbors(query, questionVector, index.notes, Math.min(3, this.settings.chatRetrievalCount), -1);
 
     const context = await Promise.all(sources.map(async ({ entry, score }, position) => {
       const file = this.app.vault.getAbstractFileByPath(entry.path);
