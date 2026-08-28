@@ -1,7 +1,7 @@
 {
   "name": "auto-zettelkasten",
-  "version": "1.0.0",
-  "description": "Generate A-mem-inspired atomic notes in an Obsidian vault.",
+  "version": "1.0.1",
+  "description": "Create linked A-mem-inspired notes from conversations, files, clipboard text, and articles. 将内容自动转化为带标签和双向链接的 A-mem 风格笔记。",
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",

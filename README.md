@@ -1,8 +1,10 @@
 # Auto-Zettelkasten for Obsidian
 
-把对话、Obsidian vault 内的文件、剪贴板文本和网页文章转换成一组可复用的原子笔记（atomic notes），并按 [A-MEM: Agentic Memory for LLM Agents](https://github.com/agiresearch/A-mem) 的思路进行标签、检索、关联和轻量演化。
+**English** — Auto-Zettelkasten turns conversations, files in an Obsidian vault, clipboard text, and web articles into reusable atomic notes. Inspired by [A-MEM: Agentic Memory for LLM Agents](https://github.com/agiresearch/A-mem), it automatically generates metadata and tags, retrieves related notes, creates bidirectional wikilinks, and performs lightweight memory evolution.
 
-> 这是一个 **Obsidian 社区插件项目**，不是 A-mem Python 仓库的封装。它把 A-mem 的 `MemoryNote` 元数据、近邻检索和 `strengthen` / `update_neighbor` 演化流程映射到 Obsidian Markdown、YAML frontmatter 和 wikilinks。
+**中文** — Auto-Zettelkasten 将对话、Obsidian vault 内的文件、剪贴板文本和网页文章转换成一组可复用的原子笔记（atomic notes）。它借鉴 [A-MEM: Agentic Memory for LLM Agents](https://github.com/agiresearch/A-mem) 的思路，自动生成元数据和标签、检索相关笔记、建立双向链接，并进行轻量的记忆演化。
+
+> This is an **Obsidian Community plugin project**, not a wrapper around the A-mem Python repository. It maps A-mem's `MemoryNote` metadata, nearest-neighbor retrieval, and `strengthen` / `update_neighbor` evolution operations to Obsidian Markdown, YAML frontmatter, and wikilinks. / 这是一个 **Obsidian 社区插件项目**，不是 A-mem Python 仓库的封装。它把 A-mem 的 `MemoryNote` 元数据、近邻检索和 `strengthen` / `update_neighbor` 演化流程映射到 Obsidian Markdown、YAML frontmatter 和 wikilinks。
 
 ## 已实现功能
 
