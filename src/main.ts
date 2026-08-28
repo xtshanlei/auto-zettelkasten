@@ -7,6 +7,7 @@ import {
   PluginSettingTab,
   Setting,
   TFile,
+  RequestUrlResponse,
   WorkspaceLeaf,
   normalizePath,
   requestUrl
@@ -227,7 +228,8 @@ export default class AMemNotesPlugin extends Plugin {
   }
 
   async loadSettings(): Promise<void> {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const saved = await this.loadData();
+    this.settings = { ...DEFAULT_SETTINGS, ...(isRecord(saved) ? saved : {}) } as AMemSettings;
   }
 
   async saveSettings(): Promise<void> {
@@ -244,7 +246,6 @@ export default class AMemNotesPlugin extends Plugin {
       leaf = this.app.workspace.getRightLeaf(false) ?? this.app.workspace.getLeaf("tab");
       await leaf.setViewState({ type: CHAT_VIEW_TYPE, active: true });
     }
-    await this.app.workspace.revealLeaf(leaf);
   }
 
   private async ingestActiveFile(): Promise<void> {
@@ -311,7 +312,7 @@ export default class AMemNotesPlugin extends Plugin {
 
     try {
       new Notice("A-mem：正在获取文章正文…", 4000);
-      const response: any = await requestUrl({ url, method: "GET" });
+      const response: RequestUrlResponse = await requestUrl({ url, method: "GET" });
       const article = extractArticleFromHtml(String(response.text ?? ""), url);
       if (!article.text) {
         throw new Error("未能从页面提取足够的正文文本");
@@ -769,7 +770,7 @@ Requirements:
   ): Promise<unknown> {
     const baseUrl = credentials?.baseUrl || this.settings.baseUrl.trim();
     const apiKey = credentials?.apiKey || this.settings.apiKey.trim();
-    const response: any = await requestUrl({
+    const response: RequestUrlResponse = await requestUrl({
       url: this.apiUrl(endpoint, baseUrl),
       method: "POST",
       contentType: "application/json",
@@ -1174,7 +1175,7 @@ class AMemSettingTab extends PluginSettingTab {
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
-    containerEl.createEl("h2", { text: "Auto-Zettelkasten" });
+    new Setting(containerEl).setName("Auto-Zettelkasten").setHeading();
     containerEl.createEl("p", {
       text: "Use an OpenAI-compatible chat + embeddings API to create linked, atomic A-mem memory notes inside this vault."
     });
@@ -1249,7 +1250,7 @@ class AMemSettingTab extends PluginSettingTab {
           });
       });
 
-    containerEl.createEl("h3", { text: "Vault output" });
+    new Setting(containerEl).setName("Vault output").setHeading();
 
     new Setting(containerEl)
       .setName("A-mem notes folder")
@@ -1284,7 +1285,7 @@ class AMemSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }));
 
-    containerEl.createEl("h3", { text: "Tagging and evolution" });
+    new Setting(containerEl).setName("Tagging and evolution").setHeading();
 
     new Setting(containerEl)
       .setName("Use controlled tag vocabulary")
@@ -1336,7 +1337,7 @@ class AMemSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }));
 
-    containerEl.createEl("h3", { text: "Limits" });
+    new Setting(containerEl).setName("Limits").setHeading();
     this.addNumberSetting(containerEl, "Maximum notes per ingestion", "Hard cap to control cost and note volume.", "maxNotesPerIngest", 1, 100);
     this.addNumberSetting(containerEl, "Maximum characters per source chunk", "Long sources are split by paragraphs before note generation.", "maxChunkCharacters", 2000, 50000);
     this.addNumberSetting(containerEl, "Chunk overlap characters", "Context retained between adjacent chunks. Set 0 to disable overlap.", "chunkOverlapCharacters", 0, 5000);
